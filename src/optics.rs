@@ -9,6 +9,7 @@ pub use std::f32::consts::PI;
 pub type Vector = na::Vector3<F>;
 pub type UnitVector = na::UnitVector3<F>;
 pub type Point = na::Point3<F>;
+pub type Matrix3x3 = na::SMatrix<F, 3, 3>;
 
 pub trait OpticalSurface {
     fn ray_interaction(&self, ray: &Ray) -> Option<Ray>;
@@ -56,7 +57,7 @@ impl Plane {
     }
 
     pub fn tangent(&self) -> UnitVector {
-        if self.normal.dot(&Vector::x()) < 0.1 {
+        if self.normal.dot(&Vector::x()).abs() > 0.9 {
             UnitVector::new_normalize(Vector::y().cross(&self.normal))
         } else {
             UnitVector::new_normalize(Vector::x().cross(&self.normal))

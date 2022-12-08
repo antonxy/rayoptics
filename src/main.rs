@@ -1,13 +1,18 @@
 extern crate kiss3d;
 use kiss3d::nalgebra as na;
+use kiss3d::ncollide3d;
 
 extern crate itertools;
 extern crate itertools_num;
+
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use itertools_num::linspace;
 use na::UnitQuaternion;
 use na::Point3;
 
+use kiss3d::resource::Mesh;
 use kiss3d::light::Light;
 use kiss3d::window::Window;
 
@@ -69,6 +74,26 @@ fn add_plane(plane: &Plane, size: F, color: &str, window: &mut Window) {
     lens_node.set_color(0.0, 1.0, 0.0);
 }
 
+fn add_surface(surface: &SphericalSurface, size: F, window: &mut Window) {
+    let mut hemi : ncollide3d::procedural::TriMesh<f32> = ncollide3d::procedural::unit_hemisphere(16, 16);
+    let pl = &surface.plane;
+    let mut mat = Matrix3x3::from_columns(&[
+        pl.tangent().into_inner(),
+        pl.normal.into_inner(),
+        pl.cotangent().into_inner(),
+    ]);
+
+    hemi.coords = hemi.coords.iter().map(|p| {
+        mat * p * size + pl.origin.coords
+    }).map(|p| {
+        surface.tangent_plane(&p).origin
+    }).collect();
+
+    let mut mesh = Mesh::from_trimesh(hemi, false);
+    let mut node = window.add_mesh(Rc::new(RefCell::new(mesh)), Vector::new(1.0, 1.0, 1.0));
+    node.enable_backface_culling(false);
+}
+
 fn draw_axes(window: &mut Window) {
     window.draw_line(&Point3::origin(), &Point3::new(1.0, 0.0, 0.0), &Point3::new(1.0, 0.0, 0.0));
     window.draw_line(&Point3::origin(), &Point3::new(0.0, 1.0, 0.0), &Point3::new(0.0, 1.0, 0.0));
@@ -82,7 +107,7 @@ fn main() {
 
     let mut rays = Vec::new();
 
-    for ang in linspace::<F>(0.0, 2.0*PI, 20) {
+    for ang in linspace::<F>(0.0, 2.0*PI, 50) {
         rays.push(Ray::new(
             Point::new(0.0, ang.cos(), ang.sin()),
             Vector::new(1.0, 0.0, 0.0)
@@ -96,26 +121,26 @@ fn main() {
     let lens = SphericalLens::new(
         Plane {
             origin: Point::new(1.0, 0.0, 0.0),
-            normal: UnitVector::new_normalize(Vector::new(1.0, 0.0, 0.0)),
+            normal: UnitVector::new_normalize(Vector::new(1.0, 0.5, 0.0)),
         },
         5.0,
-        2.0,
+        1.5,
         0.2,
     );
-    add_plane(&lens.surface_in.plane, 3.0, "red", &mut window);
-    add_plane(&lens.surface_out.plane, 3.0, "red", &mut window);
+    add_surface(&lens.surface_in, 3.0, &mut window);
+    add_surface(&lens.surface_out, 3.0, &mut window);
 
     let lens2 = SphericalLens::new(
         Plane {
-            origin: Point::new(5.0, 0.0, 0.0),
+            origin: Point::new(10.0, 0.0, 0.0),
             normal: UnitVector::new_normalize(Vector::new(1.0, 0.0, 0.0)),
         },
         5.0,
-        2.0,
+        1.5,
         0.2,
     );
-    add_plane(&lens2.surface_in.plane, 3.0, "red", &mut window);
-    add_plane(&lens2.surface_out.plane, 3.0, "red", &mut window);
+    add_surface(&lens2.surface_in, 3.0, &mut window);
+    add_surface(&lens2.surface_out, 3.0, &mut window);
 
 
     let mut optical_system = SequentialOpticalSystem::new();
