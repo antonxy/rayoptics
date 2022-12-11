@@ -19,6 +19,38 @@ use kiss3d::window::Window;
 mod optics;
 use optics::*;
 
+fn wavelength_to_rgb(wavelength: F) -> na::Point3<f32> {
+    let wavelength = wavelength * 1e9;
+    let mut r: f32 = 0.0;
+    let mut g: f32 = 0.0;
+    let mut b: f32 = 0.0;
+
+    if wavelength >= 380.0 && wavelength <= 440.0 {
+        r = -1.0 * (wavelength - 440.0) / (440.0 - 380.0);
+        b = 1.0;
+    } else if wavelength >= 440.0 && wavelength <= 490.0 {
+        g = (wavelength - 440.0) / (490.0 - 440.0);
+        b = 1.0;
+    } else if wavelength >= 490.0 && wavelength <= 510.0 {
+        g = 1.0;
+        b = -1.0 * (wavelength - 510.0) / (510.0 - 490.0);
+    } else if wavelength >= 510.0 && wavelength <= 580.0 {
+        r = (wavelength - 510.0) / (580.0 - 510.0);
+        g = 1.0;
+    } else if wavelength >= 580.0 && wavelength <= 645.0 {
+        r = 1.0;
+        g = -1.0 * (wavelength - 645.0) / (645.0 - 580.0);
+    } else if wavelength >= 645.0 && wavelength <= 780.0 {
+        r = 1.0;
+    }
+
+    let r = r.min(1.0).max(0.0);
+    let g = g.min(1.0).max(0.0);
+    let b = b.min(1.0).max(0.0);
+
+    return na::Point3::new(r, g, b);
+}
+
 
 fn draw_ray(ray: &Ray, window: &mut Window, length: F) {
     // Compute the end point of the ray
@@ -27,7 +59,7 @@ fn draw_ray(ray: &Ray, window: &mut Window, length: F) {
     window.draw_line(
         &ray.origin.into(),
         &end_point.into(),
-        &na::Point3::new(1.0, 0.0, 0.0),
+        &wavelength_to_rgb(ray.wavelength),
     );
 }
 
@@ -38,19 +70,19 @@ fn draw_trace(trace: &RayTrace, window: &mut Window, length: F) {
             window.draw_line(
                 &last_point,
                 &point,
-                &na::Point3::new(1.0, 0.0, 0.0),
+                &wavelength_to_rgb(trace.wavelength),
             );
             last_point = *point;
         }
         window.draw_line(
             &last_point,
             &(last_point + trace.direction.into_inner() * length),
-            &na::Point3::new(1.0, 0.0, 0.0),
+            &wavelength_to_rgb(trace.wavelength),
         );
     }
 }
 
-fn add_plane(plane: &Plane, size: F, color: &str, window: &mut Window) {
+fn add_plane(plane: &Plane, size: F, window: &mut Window) {
     // Compute the points at the corners of the lens
     let x = plane.normal.cross(&Vector::y()).normalize();
     let y = plane.normal.cross(&x).normalize();
@@ -107,6 +139,7 @@ fn main() {
 
     let mut rays = Vec::new();
 
+/*
     for ang in linspace::<F>(0.0, 2.0*PI, 50) {
         rays.push(Ray::new(
             Point::new(0.0, ang.cos(), ang.sin()),
@@ -115,6 +148,15 @@ fn main() {
         rays.push(Ray::new(
             Point::new(0.0, 0.5*ang.cos(), 0.5*ang.sin()),
             Vector::new(1.0, 0.0, 0.0)
+        ));
+    }
+*/
+
+    for wavelength in linspace::<F>(400.0e-9, 800.0e-9, 20) {
+        rays.push(Ray::new(
+            Point::new(0.0, 0.0, 0.0),
+            Vector::x(),
+            wavelength,
         ));
     }
 
@@ -130,6 +172,17 @@ fn main() {
     add_surface(&lens.surface_in, 3.0, &mut window);
     add_surface(&lens.surface_out, 3.0, &mut window);
 
+    let grating = DiffractionGrating::new(
+        Plane {
+            origin: Point::new(5.0, 0.0, 0.0),
+            normal: UnitVector::new_normalize(Vector::x()),
+        },
+        UnitVector::new_normalize(Vector::z()),
+        2.0e-6,//500 1/mm
+        1,
+    );
+    add_plane(&grating.plane, 3.0, &mut window);
+
     let lens2 = SphericalLens::new(
         Plane {
             origin: Point::new(10.0, 0.0, 0.0),
@@ -143,9 +196,12 @@ fn main() {
     add_surface(&lens2.surface_out, 3.0, &mut window);
 
 
+
     let mut optical_system = SequentialOpticalSystem::new();
     optical_system.surfaces.push(Box::new(lens.surface_in));
     optical_system.surfaces.push(Box::new(lens.surface_out));
+
+    optical_system.surfaces.push(Box::new(grating));
 
     optical_system.surfaces.push(Box::new(lens2.surface_in));
     optical_system.surfaces.push(Box::new(lens2.surface_out));

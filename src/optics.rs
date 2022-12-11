@@ -73,13 +73,15 @@ impl Plane {
 pub struct Ray {
     pub origin: Point,
     pub direction: UnitVector,
+    pub wavelength: F,
 }
 
 impl Ray {
-    pub fn new(origin: Point, direction: Vector) -> Self {
+    pub fn new(origin: Point, direction: Vector, wavelength: F) -> Self {
         Self {
-            origin: origin,
+            origin,
             direction: UnitVector::new_normalize(direction),
+            wavelength,
         }
     }
 
@@ -131,6 +133,7 @@ fn refract_ray(lens: &IdealLens, ray: &Ray) -> Option<Ray> {
     return Some(Ray {
         origin: intersection,
         direction: direction_out,
+        wavelength: ray.wavelength,
     });
 }
 
@@ -162,6 +165,7 @@ impl OpticalSurface for SphericalSurface {
         Some(Ray {
             origin: tangent_plane.origin,
             direction: outgoing_dir,
+            wavelength: ray.wavelength,
         })
     }
 }
@@ -193,10 +197,43 @@ impl SphericalLens {
     }
 }
 
-struct DiffractionGrating {
+pub struct DiffractionGrating {
     pub plane: Plane,
-    pub lines_per_mm: F,
+    pub line_direction: UnitVector,
+    pub line_distance: F,
+    pub order: i32,  // For now simulate only one order, since I don't have branching rays
 }
+
+impl DiffractionGrating {
+    pub fn new(plane: Plane, line_direction: UnitVector, line_distance: F, order: i32) -> Self {
+        Self {
+            plane,
+            line_direction,
+            line_distance,
+            order,
+        }
+    }
+}
+
+impl OpticalSurface for DiffractionGrating {
+    fn ray_interaction(&self, ray: &Ray) -> Option<Ray> {
+        let intersection = ray.intersect(&self.plane)?;
+
+        let tangent = UnitVector::new_normalize(self.line_direction.into_inner().cross(&self.plane.normal.into_inner()));
+
+        let sin_incident_angle = tangent.into_inner().dot(&ray.direction.into_inner());
+        let sin_outgoing_angle = sin_incident_angle + self.order as F * ray.wavelength / self.line_distance;
+
+        let outgoing_dir = UnitQuaternion::from_axis_angle(&self.line_direction, sin_outgoing_angle.asin()) * self.plane.normal.into_inner();
+
+        Some(Ray {
+            origin: intersection,
+            direction: UnitVector::new_normalize(outgoing_dir),
+            wavelength: ray.wavelength,
+        })
+    }
+}
+
 
 pub struct SequentialOpticalSystem {
     pub surfaces: Vec<Box<dyn OpticalSurface>>,
@@ -213,6 +250,7 @@ impl SequentialOpticalSystem {
         let mut trace = RayTrace {
             points: vec![incoming.origin],
             direction: incoming.direction,
+            wavelength: incoming.wavelength,
         };
         let mut ray = incoming.clone();
         for surface in &self.surfaces {
@@ -232,6 +270,7 @@ impl SequentialOpticalSystem {
 pub struct RayTrace {
     pub points: Vec<Point>,
     pub direction: UnitVector,
+    pub wavelength: F,  // Wavelength of a ray can't change
 }
 
 mod tests {
@@ -242,6 +281,7 @@ mod tests {
         let ray = Ray {
             origin: Vector::new(1.0, 1.0, 0.0),
             direction: Vector::new(1.0, 0.0, 0.0),
+            wavelength: ray.wavelength,
         };
 
         let plane = Plane {
