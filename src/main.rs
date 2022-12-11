@@ -132,25 +132,42 @@ fn draw_axes(window: &mut Window) {
     window.draw_line(&Point3::origin(), &Point3::new(0.0, 0.0, 1.0), &Point3::new(0.0, 0.0, 1.0));
 }
 
+fn generate_rays_point(angle_range: F) -> Vec<Ray> {
+    let mut rays = Vec::new();
+    for y in linspace::<F>(-angle_range, angle_range, 10) {
+        for z in linspace::<F>(-angle_range, angle_range, 10) {
+            for wavelength in linspace::<F>(400.0e-9, 700.0e-9, 10) {
+                rays.push(Ray::new(
+                    Point::new(-100.0, 0.0, 0.0),
+                    Vector::new(1.0, y, z),
+                    wavelength,
+                ));
+            }
+        }
+    }
+    rays
+}
+
 fn main() {
     let mut window = Window::new("Kiss3d: cube");
 
     window.set_light(Light::StickToCamera);
 
-    let mut rays = Vec::new();
+    let mut rays = generate_rays_point(0.01);
 
 /*
     for ang in linspace::<F>(0.0, 2.0*PI, 50) {
         rays.push(Ray::new(
             Point::new(0.0, ang.cos(), ang.sin()),
-            Vector::new(1.0, 0.0, 0.0)
+            Vector::new(1.0, 0.0, 0.0),
+            500.0e-9,
         ));
         rays.push(Ray::new(
             Point::new(0.0, 0.5*ang.cos(), 0.5*ang.sin()),
-            Vector::new(1.0, 0.0, 0.0)
+            Vector::new(1.0, 0.0, 0.0),
+            500.0e-9,
         ));
     }
-*/
 
     for wavelength in linspace::<F>(400.0e-9, 800.0e-9, 20) {
         rays.push(Ray::new(
@@ -159,11 +176,12 @@ fn main() {
             wavelength,
         ));
     }
+    */
 
     let lens = SphericalLens::new(
         Plane {
             origin: Point::new(1.0, 0.0, 0.0),
-            normal: UnitVector::new_normalize(Vector::new(1.0, 0.5, 0.0)),
+            normal: UnitVector::new_normalize(Vector::x()),
         },
         5.0,
         1.5,
@@ -172,20 +190,9 @@ fn main() {
     add_surface(&lens.surface_in, 3.0, &mut window);
     add_surface(&lens.surface_out, 3.0, &mut window);
 
-    let grating = DiffractionGrating::new(
-        Plane {
-            origin: Point::new(5.0, 0.0, 0.0),
-            normal: UnitVector::new_normalize(Vector::x()),
-        },
-        UnitVector::new_normalize(Vector::z()),
-        2.0e-6,//500 1/mm
-        1,
-    );
-    add_plane(&grating.plane, 3.0, &mut window);
-
     let lens2 = SphericalLens::new(
         Plane {
-            origin: Point::new(10.0, 0.0, 0.0),
+            origin: Point::new(11.0, 0.0, 0.0),
             normal: UnitVector::new_normalize(Vector::new(1.0, 0.0, 0.0)),
         },
         5.0,
@@ -195,23 +202,50 @@ fn main() {
     add_surface(&lens2.surface_in, 3.0, &mut window);
     add_surface(&lens2.surface_out, 3.0, &mut window);
 
+    let grating = DiffractionGrating::new(
+        Plane {
+            origin: Point::new(12.0, 0.0, 0.0),
+            normal: UnitVector::new_normalize(Vector::x()),
+        },
+        UnitVector::new_normalize(Vector::z()),
+        2.0e-6,//500 1/mm
+        1,
+    );
+    add_plane(&grating.plane, 3.0, &mut window);
+
+    let lens3 = SphericalLens::new(
+        Plane {
+            origin: Point::new(14.0, 0.5, 0.0),
+            normal: UnitVector::new_normalize(Vector::new(1.0, 0.3, 0.0)),
+        },
+        5.0,
+        1.5,
+        0.2,
+    );
+    add_surface(&lens3.surface_in, 3.0, &mut window);
+    add_surface(&lens3.surface_out, 3.0, &mut window);
+
+
 
 
     let mut optical_system = SequentialOpticalSystem::new();
     optical_system.surfaces.push(Box::new(lens.surface_in));
     optical_system.surfaces.push(Box::new(lens.surface_out));
 
-    optical_system.surfaces.push(Box::new(grating));
-
     optical_system.surfaces.push(Box::new(lens2.surface_in));
     optical_system.surfaces.push(Box::new(lens2.surface_out));
+
+    optical_system.surfaces.push(Box::new(grating));
+
+    optical_system.surfaces.push(Box::new(lens3.surface_in));
+    optical_system.surfaces.push(Box::new(lens3.surface_out));
 
     let traces: Vec<_> = rays.iter().map(|r| optical_system.trace_ray(&r)).collect();
 
 
     while window.render() {
         draw_axes(&mut window);
-        traces.iter().for_each(|r| draw_trace(&r, &mut window, 1.0));
+        traces.iter().for_each(|r| draw_trace(&r, &mut window, 10.0));
     }
 }
 
